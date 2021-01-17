@@ -26,7 +26,7 @@ disagreements = 0
 
 for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), [True, False], [True, False]):
 
-	print("Testing parameters N,t,g,n,half_full,PBC:",N,t,g,m,hf,PBC)
+	print("Testing parameters N,t,g,m,half_full,PBC:",N,t,g,m,hf,PBC)
 
 	N_filled = N // 2 if hf else 1
 	P_neg1 = 1
