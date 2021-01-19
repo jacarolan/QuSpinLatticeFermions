@@ -17,12 +17,101 @@ import itertools
 
 tolerance = 1e-10
 
-disagreements = 0
+disagreements_JD = 0
+disagreements_J = 0
+disagreements_D = 0
 
 # ## Define Constants/Helpers
 
 # In[2]:
 
+
+for N, t, g, m, PBC in itertools.product(list(range(1, 9)), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), [True, False]):
+	for N_filled in range(1, N+1):
+		print("Testing parameters (only Joe code) N,t,g,m,N_filled,PBC:",N,t,g,m,N_filled,PBC)
+
+		P_neg1 = 1
+
+
+		def stringbox(lst, caption):
+			return caption + "-" * (100 - len(caption))+"\n" + str(lst) + "\n" + "-" * 100
+
+
+		# ## Spin Basis Simulation
+
+		# In[4]:
+
+
+		spin_basis = spin_basis_1d(N, pauli=-1, Nup=N_filled)
+		static_terms = []
+		dynamic_terms = []
+
+		### Hopping term
+		L = (N if PBC else N-1)
+		hop_coupling = [[-t, i, (i+1) % N] for i in range(L)]
+		hop_coupling_dag = [[-t, (i+1) % N, i] for i in range(L)]
+		if PBC and N_filled % 2 == 0:
+		    hop_coupling[-1][0] = -hop_coupling[-1][0]
+		    hop_coupling_dag[-1][0] = -hop_coupling_dag[-1][0]
+		static_terms += [["+-", hop_coupling]]
+		static_terms += [["+-", hop_coupling_dag]]
+
+		### Mass term
+		mass_coupling = [[m * (-1) ** i, i, i] for i in range(N)]
+		static_terms += [["+-", mass_coupling]]
+
+		### E-field term
+		E_link_parity = lambda x : -1 if (x % 4) < 2 else 1
+		for i in range(N):
+		    E_coupling = [P_neg1 * -g * E_link_parity(i)] + list(range(i+1))
+		    static_terms += [["z" * (i+1), [E_coupling]]]
+
+		### Plotting spectrum
+		H = hamiltonian(static_terms, dynamic_terms, basis=spin_basis, dtype=np.float64)
+		spin_eigvals = H.eigvalsh()
+
+
+		# ## Fermion Basis
+
+		# In[5]:
+
+
+		fermion_basis = spinless_fermion_basis_1d(L=N, Nf=N_filled)
+		static_terms = []
+		dynamic_terms = []
+
+		### Hopping term
+		L = (N if PBC else N-1)
+		hop_coupling = [[-t, i, (i+1) % N] for i in range(L)]
+		hop_coupling_dag = [[-t, (i+1) % N, i] for i in range(L)]
+		static_terms += [["+-", hop_coupling]]
+		static_terms += [["+-", hop_coupling_dag]]
+
+		### Mass term
+		mass_coupling = [[m * (-1) ** i, i, i] for i in range(N)]
+		static_terms += [["+-", mass_coupling]]
+
+		### E-field term
+		E_link_parity = lambda x : -1 if (x % 4) < 2 else 1
+		for i in range(N):
+		    E_coupling = [P_neg1 * -g * E_link_parity(i) * 2 ** (i+1)] + list(range(i+1))
+		    static_terms += [["z" * (i+1), [E_coupling]]]
+
+		### Plotting spectrum
+		H = hamiltonian(static_terms, dynamic_terms, basis=fermion_basis, dtype=np.float64)
+		fermion_eigvals = H.eigvalsh()
+
+
+	# ## Comparison
+
+	# In[6]:
+
+
+		mdiff = max(fermion_eigvals - spin_eigvals)
+
+		if abs(mdiff) > tolerance:
+			print("Fermion disagreement in Joe code")
+			disagreements_J += 1
 
 for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), np.linspace(-1, 1, 4), [True, False], [True, False]):
 
@@ -32,11 +121,8 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 	P_neg1 = 1
 
 
-	# In[3]:
-
-
 	def stringbox(lst, caption):
-	    return caption + "-" * (100 - len(caption))+"\n" + str(lst) + "\n" + "-" * 100
+		return caption + "-" * (100 - len(caption))+"\n" + str(lst) + "\n" + "-" * 100
 
 
 	# ## Spin Basis Simulation
@@ -52,7 +138,7 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 	L = (N if PBC else N-1)
 	hop_coupling = [[-t, i, (i+1) % N] for i in range(L)]
 	hop_coupling_dag = [[-t, (i+1) % N, i] for i in range(L)]
-	if PBC and N % 4 == 0:
+	if PBC and N_filled % 2 == 0:
 	    hop_coupling[-1][0] = -hop_coupling[-1][0]
 	    hop_coupling_dag[-1][0] = -hop_coupling_dag[-1][0]
 	static_terms += [["+-", hop_coupling]]
@@ -86,9 +172,6 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 	L = (N if PBC else N-1)
 	hop_coupling = [[-t, i, (i+1) % N] for i in range(L)]
 	hop_coupling_dag = [[-t, (i+1) % N, i] for i in range(L)]
-	if PBC and N % 4 == 0:
-	    hop_coupling[-1][0] = -hop_coupling[-1][0]
-	    hop_coupling_dag[-1][0] = -hop_coupling_dag[-1][0]
 	static_terms += [["+-", hop_coupling]]
 	static_terms += [["+-", hop_coupling_dag]]
 
@@ -107,41 +190,24 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 	fermion_eigvals = H.eigvalsh()
 
 
-	# ## Comparison
+# ## Comparison
 
-	# In[6]:
+# In[6]:
 
 
-	mdiff = max(abs(fermion_eigvals - spin_eigvals))
+	mdiff = max(fermion_eigvals - spin_eigvals)
 
 	if abs(mdiff) > tolerance:
 		print("Fermion disagreement in Joe code")
-		disagreements += 1
-		# exit()
+		disagreements_J += 1
 
 	############### DREW CODE ####################
+	Pinit= P_neg1
 
-	#!/usr/bin/env python
-	# coding: utf-8
+	half_filling = hf # options: 1 for half filling, 0 for not half-filling
+	single_filling = (0 if hf else 1) # options: 1 for single-filling, 0 else
 
-	# In[1]:
-
-	Pinit = 1
-
-	# ## Coupling and option initialization
-
-	# In[2]:
-
-	half_filling = 1 # options: 1 for half filling, 0 for not half-filling
-	single_filling = 0 # options: 1 for single-filling, 0 else
-
-	if not hf:
-		half_filling = 0 # options: 1 for half filling, 0 for not half-filling
-		single_filling = 1 # options: 1 for single-filling, 0 else
-
-	PBC = int(PBC) # options: 1 for periodic boundary conditions, 0 for fixed
-
-	if(N//4 - N/4 == 0.0): # Checks if N is even for anti- or periodic boundary conditions
+	if(N % 4 < 2): # Checks if N is even for anti- or periodic boundary conditions
 	    Neven = 1
 	else:
 	    Neven = 0
@@ -167,7 +233,7 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 	###### Hopping terms
 	if(PBC):
 	    
-	    if(Neven): # Anti-Periodic
+	    if(Neven and half_filling): # Anti-Periodic
 	        J12 = [[-t,i,(i+1)%N] for i in range(N-1)] # The final boundary term must be added with negative coupling
 	        J13 = [[-t,(i+1)%N,i] for i in range(N-1)] 
 	        J12.append([t,N-1,0]) # The negatively-coupled (anti-periodic) final boundary terms
@@ -293,19 +359,14 @@ for N, t, g, m, hf, PBC in itertools.product(list(range(1, 11)), np.linspace(-1,
 
 	if max(abs(eigenvalues - eigenvalues1)) > tolerance:
 		print("Disagreement in Drews fermion code")
-		disagreements += 1
-		# exit()
+		disagreements_D += 1
 
 	if max(abs(eigenvalues - spin_eigvals)) > tolerance:
 		print("Disagreement between Drew and Joes code")
-		disagreements += 1
-		# exit()
+		disagreements_JD += 1
 
 
-
-	# Note: Agreeing! :) 
-
-	# In[12]:
-
-
-print("All tests completed, found", disagreements, "differences")
+print("All tests completed")
+print("Drew's fermion/JW spin output differed in", disagreements_D, "places")
+print("Joe's fermion/JW spin output differed in", disagreements_J, "places")
+print("Joe's and Drew's output differed in", disagreements_JD, "places")
