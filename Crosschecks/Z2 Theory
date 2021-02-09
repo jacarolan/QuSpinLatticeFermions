@@ -1,0 +1,363 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from __future__ import print_function, division\n",
+    "import sys,os\n",
+    "from quspin.operators import hamiltonian # Hamiltonians and operators\n",
+    "from quspin.basis import spin_basis_1d # Hilbert space spin basis\n",
+    "from quspin.basis import spinless_fermion_basis_1d # fermion basis for comparison\n",
+    "import numpy as np # generic math functions\n",
+    "import matplotlib.pyplot as plt\n",
+    "import itertools\n",
+    "plt.rcParams['figure.figsize'] = [10, 8] # changes default figure size in jupyter notebook"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Coupling and option initialization"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "N=9 # number of sites (NOT STAGGERED SITES!!)\n",
+    "Pinit=1 # P_{-1}\n",
+    "g = -1 # E-field coupling constant\n",
+    "t = -1 # coupling constant for hopping term\n",
+    "m = -1 # mass\n",
+    "\n",
+    "half_filling = 1 # options: 1 for half filling, 0 for not half-filling\n",
+    "single_filling = 0 # options: 1 for single-filling, 0 else\n",
+    "\n",
+    "PBC = 1 # options: 1 for periodic boundary conditions, 0 for fixed\n",
+    "\n",
+    "if(N % 4 < 2): # Checks if N is even for anti- or periodic boundary conditions\n",
+    "    Neven = 1\n",
+    "else:\n",
+    "    Neven = 0"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def arrayn(n): ## returns an array of length n with values 0,...,n-1\n",
+    "    return([i for i in range(n)])\n",
+    "\n",
+    "if(half_filling): # sets filling to N//2 if half filling is turned on, else it does not specify\n",
+    "    basis1 = spin_basis_1d(N,pauli=-1,Nup=N//2)\n",
+    "elif(single_filling):\n",
+    "    basis1 = spin_basis_1d(N,pauli=-1,Nup=1)\n",
+    "else:\n",
+    "    basis1 = spin_basis_1d(N,pauli=-1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "###### Hopping terms\n",
+    "if(PBC):\n",
+    "    \n",
+    "    if(Neven and half_filling): # Anti-Periodic\n",
+    "        J12 = [[-t,i,(i+1)%N] for i in range(N-1)] # The final boundary term must be added with negative coupling\n",
+    "        J13 = [[-t,(i+1)%N,i] for i in range(N-1)] \n",
+    "        J12.append([t,N-1,0]) # The negatively-coupled (anti-periodic) final boundary terms\n",
+    "        J13.append([t,0,N-1])\n",
+    "    \n",
+    "    else: # Periodic \n",
+    "        J12 = [[-t,i,(i+1)%N] for i in range(N)] # the %N and range increased by 1 adds the final boundary term making it periodic\n",
+    "        J13=[[-t,(i+1)%N,i] for i in range(N)]\n",
+    "    \n",
+    "else: # Fixed boundary conditions\n",
+    "    J12 = [[-t,i,i+1] for i in range(N-1)] # we need to append \"+-\" for signs of sigmas\n",
+    "    J13=[[-t,i+1,i] for i in range(N-1)] # append \"+-\" for signs of sigmas, i+1,i since this is h.c. term\n",
+    "\n",
+    "###### mass term (unchanged by PBC)\n",
+    "J14 = [[m*(-1.0)**i,i,i] for i in range(N)] # append  \"+-\" for signs of sigmas"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "staticpart1=[[\"+-\",J14],[\"+-\",J12],[\"+-\",J13]] # Defining static and dynamic parts of H and filling with hopping and mass terms\n",
+    "dynamicpart1=[]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "###### E-field interaction term\n",
+    "\n",
+    "zstring = \"z\"\n",
+    "def upperindices(n): # Creating a function to make the right length string of \"z\"\n",
+    "    a = \"\"\n",
+    "    for i in range(n):\n",
+    "        a = a + zstring\n",
+    "    return(a)\n",
+    "\n",
+    "def summandJ1(n): # Creating a function to generate coupling lists for the E-field product term\n",
+    "    indices=[i for i in range(n+1)]\n",
+    "    indices.insert(0,-Pinit*g*(-1.0)**(n*(n+1.0)*.5)*(-1.0)**(n+1.0))\n",
+    "    indices=[upperindices(n+1),[indices]]\n",
+    "    return(indices)\n",
+    "\n",
+    "for i in range(0,N): # Piecemeal inserting the E-field product term into the hamiltonian\n",
+    "        staticpart1.insert(0,summandJ1(int(i)))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Hermiticity check passed!\n",
+      "Symmetry checks passed!\n",
+      "Particle conservation check passed!\n",
+      "Static couplings spin: [['zzzzzzzzz', [[-1.0, 0, 1, 2, 3, 4, 5, 6, 7, 8]]], ['zzzzzzzz', [[1.0, 0, 1, 2, 3, 4, 5, 6, 7]]], ['zzzzzzz', [[1.0, 0, 1, 2, 3, 4, 5, 6]]], ['zzzzzz', [[-1.0, 0, 1, 2, 3, 4, 5]]], ['zzzzz', [[-1.0, 0, 1, 2, 3, 4]]], ['zzzz', [[1.0, 0, 1, 2, 3]]], ['zzz', [[1.0, 0, 1, 2]]], ['zz', [[-1.0, 0, 1]]], ['z', [[-1.0, 0]]], ['+-', [[-1.0, 0, 0], [1.0, 1, 1], [-1.0, 2, 2], [1.0, 3, 3], [-1.0, 4, 4], [1.0, 5, 5], [-1.0, 6, 6], [1.0, 7, 7], [-1.0, 8, 8]]], ['+-', [[1, 0, 1], [1, 1, 2], [1, 2, 3], [1, 3, 4], [1, 4, 5], [1, 5, 6], [1, 6, 7], [1, 7, 8], [-1, 8, 0]]], ['+-', [[1, 1, 0], [1, 2, 1], [1, 3, 2], [1, 4, 3], [1, 5, 4], [1, 6, 5], [1, 7, 6], [1, 8, 7], [-1, 0, 8]]]]\n",
+      "# of eigenvalues: 126\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 720x576 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "H1 = hamiltonian(staticpart1,dynamicpart1,basis=basis1,dtype=np.float64) # Creating the hamiltonian with proper basis\n",
+    "\n",
+    "eigenvalues1 = H1.eigvalsh() # Getting and plotting eigenvalues\n",
+    "plt.plot(eigenvalues1,'+')\n",
+    "\n",
+    "print(\"Static couplings spin:\", staticpart1)\n",
+    "\n",
+    "print(\"# of eigenvalues: \" + str(len(eigenvalues1))) # Printing number of eigenvalues for comparison\n",
+    "#x=np.linspace(0,50,500)\n",
+    "#plt.plot(x,np.sqrt(1+np.sin(2*np.pi*(x-25.0)/100.0)**2))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Note: Disagrees with Niklas's code for PBC = 1 and N is EVEN"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Do it again with Fermion basis to test"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Define basis\n",
+    "if(half_filling): # sets filling to N//2 if half filling is turned on, else it does not specify\n",
+    "    basis = spinless_fermion_basis_1d (L=N,Nf=N//2)\n",
+    "elif(single_filling):\n",
+    "    basis = spinless_fermion_basis_1d (L=N,Nf=1)\n",
+    "else:\n",
+    "    basis = spinless_fermion_basis_1d (L=N)\n",
+    "\n",
+    "###### Hopping terms\n",
+    "if(PBC):\n",
+    "    \n",
+    "    J2 = [[-t,i,(i+1)%N] for i in range(N)] # fermionic basis in quspin gets rid of need for manual anti-periodicity adjustment\n",
+    "    J3=[[-t,(i+1)%N,i] for i in range(N)]\n",
+    "    \n",
+    "else: # Fixed boundary conditions\n",
+    "    J2 = [[-t,i,i+1] for i in range(N-1)] # we need to append \"+-\" for daggers of psis\n",
+    "    J3=[[-t,i+1,i] for i in range(N-1)] # append \"+-\" for daggers of psis, i+1,i since this is h.c. term\n",
+    "\n",
+    "###### mass term (unchanged by PBC)\n",
+    "J4 = [[m*(-1.0)**i,i,i] for i in range(N)] # append  \"+-\" for daggers of psis"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "staticpart=[[\"+-\",J4],[\"+-\",J2],[\"+-\",J3]] # Defining static and dynamic parts of H and filling with hopping and mass terms\n",
+    "dynamicpart=[]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "###### E-field interaction term\n",
+    "\n",
+    "zstring = \"z\"\n",
+    "def upperindices(n): # Creating a function to make the right length string of \"z\"\n",
+    "    a = \"\"\n",
+    "    for i in range(n):\n",
+    "        a = a + zstring\n",
+    "    return(a)\n",
+    "\n",
+    "def summandJ(n): # Creating a function to generate coupling lists for the E-field product term\n",
+    "    indices=[i for i in range(n+1)]\n",
+    "    indices.insert(0,-Pinit*g*(-1.0)**(n*(n+1.0)*.5)*(-2.0)**(n+1.0)) # The extra -2^n is due to the fermion basis \"z\" defn.\n",
+    "    indices=[upperindices(n+1),[indices]]\n",
+    "    return(indices)\n",
+    "\n",
+    "for i in range(N): # Piecemeal inserting the E-field product term into the hamiltonian\n",
+    "        staticpart.insert(0,summandJ(int(i)))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Hermiticity check passed!\n",
+      "Symmetry checks passed!\n",
+      "Particle conservation check passed!\n",
+      "Static couplings fermion: [['zzzzzzzzz', [[-512.0, 0, 1, 2, 3, 4, 5, 6, 7, 8]]], ['zzzzzzzz', [[256.0, 0, 1, 2, 3, 4, 5, 6, 7]]], ['zzzzzzz', [[128.0, 0, 1, 2, 3, 4, 5, 6]]], ['zzzzzz', [[-64.0, 0, 1, 2, 3, 4, 5]]], ['zzzzz', [[-32.0, 0, 1, 2, 3, 4]]], ['zzzz', [[16.0, 0, 1, 2, 3]]], ['zzz', [[8.0, 0, 1, 2]]], ['zz', [[-4.0, 0, 1]]], ['z', [[-2.0, 0]]], ['+-', [[-1.0, 0, 0], [1.0, 1, 1], [-1.0, 2, 2], [1.0, 3, 3], [-1.0, 4, 4], [1.0, 5, 5], [-1.0, 6, 6], [1.0, 7, 7], [-1.0, 8, 8]]], ['+-', [[1, 0, 1], [1, 1, 2], [1, 2, 3], [1, 3, 4], [1, 4, 5], [1, 5, 6], [1, 6, 7], [1, 7, 8], [1, 8, 0]]], ['+-', [[1, 1, 0], [1, 2, 1], [1, 3, 2], [1, 4, 3], [1, 5, 4], [1, 6, 5], [1, 7, 6], [1, 8, 7], [1, 0, 8]]]]\n",
+      "# of eigenvalues: 126\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 576x576 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "H = hamiltonian(staticpart,dynamicpart,basis=basis,dtype=np.float64) # Creating the hamiltonian with proper basis\n",
+    "\n",
+    "eigenvalues = H.eigvalsh() # Getting and plotting eigenvalues0\n",
+    "f = plt.figure(figsize=(8,8))\n",
+    "\n",
+    "print(\"Static couplings fermion:\", staticpart)\n",
+    "\n",
+    "ax = plt.subplot(111)\n",
+    "\n",
+    "ax.plot(eigenvalues,'o')\n",
+    "ax.plot(eigenvalues1,'+')\n",
+    "\n",
+    "\n",
+    "print(\"# of eigenvalues: \" + str(len(eigenvalues))) # Printing number of eigenvalues for comparison"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Note: Agreeing! :) "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Eigenvalues:\n",
+      " [-7.01175007 -6.50796437 -5.73928995 -5.71459181 -5.58956652 -5.35343452\n",
+      " -5.20581409 -5.02165198 -5.00993059 -4.57552776 -4.56861591 -4.4186677\n",
+      " -4.22837776 -4.18796766 -4.01526748 -4.00928631 -3.81055236 -3.63520037\n",
+      " -3.6289627  -3.51304175 -3.47343767 -3.29476521 -3.25293132 -2.91285077\n",
+      " -2.89798022 -2.83603005 -2.80868337 -2.79302991 -2.70448174 -2.35819457\n",
+      " -2.30796328 -1.90259715 -1.86148716 -1.68116858 -1.61294061 -1.58514196\n",
+      " -1.35134814 -1.29255824 -1.18476959 -1.11389113 -1.08819177 -0.78902548\n",
+      " -0.71873049 -0.47485087 -0.40584143 -0.39543008 -0.3160145  -0.22915755\n",
+      " -0.16259936 -0.10934909 -0.10367208 -0.03383867 -0.02860891  0.13606397\n",
+      "  0.1861177   0.23721733  0.28056707  0.37427716  0.41916802  0.4338253\n",
+      "  0.5245327   0.57083627  0.64367365  0.69881962  0.83601924  0.88206869\n",
+      "  0.93892168  0.97179329  1.04662838  1.17228234  1.23536486  1.41874667\n",
+      "  1.50510572  1.5231034   1.57552666  1.7483688   1.77658452  1.88671206\n",
+      "  1.97975464  2.01088173  2.35597415  2.39779667  2.42825791  2.64782971\n",
+      "  2.68343359  2.73220793  3.11653248  3.11995498  3.2448762   3.31346165\n",
+      "  4.32169056  4.38088935  4.43338691  4.50810403  4.58394892  4.77913684\n",
+      "  4.80974715  4.84571432  4.9097313   4.98048909  5.13361954  5.19769202\n",
+      "  5.24352981  5.25441129  5.30691884  5.37554784  5.50085805  5.53423828\n",
+      "  5.69091074  5.80887753  5.92801249  6.42643743  6.47683961  6.48648402\n",
+      "  6.50190741  6.75376995  6.95812931  9.57998524  9.64084321  9.74142609\n",
+      "  9.89604633 10.07031323 10.23665429 10.33830664 10.38865564 14.75048257]\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(\"Eigenvalues:\\n\", eigenvalues1)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
